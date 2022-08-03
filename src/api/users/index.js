@@ -3,7 +3,7 @@
 import express from "express"
 import createHttpError from "http-errors"
 import BlogPostsModel from "./model.js"
-import CommentModal from "./commentsModal.js"
+import q2m from "query-to-mongo"
 
 const blogPostsRouter = express.Router()
 
@@ -19,9 +19,37 @@ blogPostsRouter.post("/", async (req, res, next) => {
 })
 
 blogPostsRouter.get("/", async (req, res, next) => {
+  // try {
+  //   const blogPosts = await BlogPostsModel.find()
+  //   res.send(blogPosts)
+  // } catch (error) {
+  //   next(error)
+  // }
   try {
-    const blogPosts = await BlogPostsModel.find()
-    res.send(blogPosts)
+    const mongoQuery = q2m(req.query)
+    const totalBlogPosts = await BlogPostsModel.countDocuments(
+      mongoQuery.criteria
+    )
+    const findBlogPosts = await BlogPostsModel.find(
+      mongoQuery.criteria
+      //mongoQuery.options.fields
+    )
+    // http://localhost:3001/blogPosts?category=Music  RESULt== 2
+    console.log("TOTAL BLOG POSTS: ", totalBlogPosts)
+    console.log("FIND BLOG POSTS: ", findBlogPosts)
+    // .limit(mongoQuery.options.limit)
+    // .skip(mongoQuery.options.skip)
+    // .sort(mongoQuery.options.sort)
+    res.send({
+      links: mongoQuery.links(
+        "http://localhost:3001/blogPosts",
+        totalBlogPosts
+      ),
+      totalBlogPosts,
+      //totalPages: Math.ceil(totalBlogPosts / mongoQuery.options.limit),
+      findBlogPosts,
+    })
+    //res.send(findBlogPosts)
   } catch (error) {
     next(error)
   }
