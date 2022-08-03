@@ -3,7 +3,7 @@
 import express from "express"
 import createHttpError from "http-errors"
 import BlogPostsModel from "./model.js"
-import ReviewsModal from "./reviewsModal.js"
+import CommentModal from "./commentsModal.js"
 
 const blogPostsRouter = express.Router()
 
@@ -88,29 +88,151 @@ blogPostsRouter.delete("/:postId", async (req, res, next) => {
   }
 })
 
-blogPostsRouter.post("/:postId/reviews", async (req, res, next) => {
+blogPostsRouter.post("/:postId/comments", async (req, res, next) => {
   try {
-    const blogIndex = await BlogPostsModel.findByIdAndUpdate(
-      req.params.postId,
-      req.body.reviews
-    )
-    const newReview = new ReviewsModal(req.body)
-    console.log(blogIndex)
-    console.log(newReview)
-    if (blogIndex !== -1) {
-      blogIndex.reviews.push(newReview)
-    } else {
-      return null
-    }
+    const blogPostId = await BlogPostsModel.findById(req.body.postId, {
+      _id: 0,
+    })
+    console.log(blogPostId)
+    if (blogPostId) {
+      const commentToInsert = {
+        ...blogPostId.toObject(),
+        ...req.body,
+        created_At: new Date(),
+      }
+      console.log(commentToInsert)
 
-    // if (blogPosts) {
-    //   res.send(blogPosts)
-    // } else {
-    //   next(createHttpError(404, `User with id ${req.params.postId} not found!`))
-    // }
+      const updatedBlogPost = await BlogPostsModel.findByIdAndUpdate(
+        req.params.postId, // WHO
+        { $push: { commentHistory: commentToInsert } }, // HOW
+        { new: true, runValidators: true } // OPTIONS
+      )
+      if (updatedBlogPost) {
+        res.send(updatedBlogPost)
+      } else {
+        next(
+          createHttpError(
+            404,
+            `Blog post with id ${req.params.postId} not found!`
+          )
+        )
+      }
+    } else {
+      // 4. In case of book not found --> 404
+      next(
+        createHttpError(404, `Comment with id ${req.body.postId} not found!`)
+      )
+    }
   } catch (error) {
     next(error)
   }
 })
 
+blogPostsRouter.get("/:postId/comments", async (req, res, next) => {
+  try {
+    const blogPostId = await BlogPostsModel.findById(req.params.postId)
+    if (blogPostId) {
+      res.send(blogPostId.commentHistory)
+    } else {
+      next(
+        createHttpError(
+          404,
+          `Blog post with id ${req.params.postId} not found!`
+        )
+      )
+    }
+  } catch (error) {
+    next(error)
+  }
+})
+blogPostsRouter.get("/:postId/comments/:commentId", async (req, res, next) => {
+  try {
+    const blogPostId = await BlogPostsModel.findById(req.params.postId)
+    if (blogPostId) {
+      const commentById = blogPostId.commentHistory.find(
+        (comment) => comment._id.toString() === req.params.commentId
+      )
+      if (commentById) {
+        res.send(commentById)
+      } else {
+        next(
+          createHttpError(
+            404,
+            `Comment with id ${req.params.commentId} not found!`
+          )
+        )
+      }
+    } else {
+      next(
+        createHttpError(
+          404,
+          `Blog Post with id ${req.params.postId} not found!`
+        )
+      )
+    }
+  } catch (error) {
+    next(error)
+  }
+})
+
+blogPostsRouter.put("/:postId/comments/:commentId", async (req, res, next) => {
+  try {
+    // 1. Find user by id (obtaining a MONGOOSE DOCUMENT)
+    const blogPostId = await BlogPostsModel.findById(req.params.postId)
+
+    if (blogPostId) {
+      // 2. Update the item in the array by using normal JS code
+      // 2.1 Search for the index of the product into the purchaseHistory array
+
+      const index = blogPostId.commentHistory.findIndex(
+        (comment) => comment._id.toString() === req.params.commentId
+      )
+
+      if (index !== -1) {
+        // 2.2 Modify that product
+        blogPostId.commentHistory[index] = {
+          ...blogPostId.commentHistory[index].toObject(),
+          ...req.body,
+        }
+
+        // 3. Since the blogPostId object is a MONGOOSE DOCUMENT I can then use .save() to update that record
+        await blogPostId.save()
+        res.send(blogPostId)
+      } else {
+        next(
+          createHttpError(
+            404,
+            `Book with id ${req.params.commentId} not found!`
+          )
+        )
+      }
+    } else {
+      next(createHttpError(404, `User with id ${req.params.postId} not found!`))
+    }
+  } catch (error) {
+    next(error)
+  }
+})
+
+blogPostsRouter.delete(
+  "/:postId/comments/:commentId",
+  async (req, res, next) => {
+    try {
+      const updateBlogPost = await BlogPostsModel.findByIdAndUpdate(
+        req.params.postId, // WHO
+        { $pull: { commentHistory: { _id: req.params.commentId } } }, // HOW
+        { new: true, runValidators: true } // OPTIONS
+      )
+      if (updateBlogPost) {
+        res.send(updateBlogPost)
+      } else {
+        next(
+          createHttpError(404, `User with id ${req.params.postId} not found!`)
+        )
+      }
+    } catch (error) {
+      next(error)
+    }
+  }
+)
 export default blogPostsRouter
